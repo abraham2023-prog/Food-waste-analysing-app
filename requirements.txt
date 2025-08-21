@@ -1,0 +1,7 @@
+Python 3.7+
+Streamlit 1.0+
+Pandas 1.0+
+NumPy 1.18+
+Plotly 5.0+
+
+
