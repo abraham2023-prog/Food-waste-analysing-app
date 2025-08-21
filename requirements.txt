@@ -1,11 +1,9 @@
-streamlit>=1.23.1
-pandas>=1.5.3
-numpy>=1.24.0
-scikit-learn>=1.3.0
-matplotlib>=3.7.0
-seaborn>=0.12.2
-pickle-mixin>=1.0.0
-plotly
+Python 3.7+
+Streamlit 1.0+
+Pandas 1.0+
+NumPy 1.18+
+Plotly 5.0+
+
 
 
 
