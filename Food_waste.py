@@ -54,57 +54,103 @@ with st.sidebar:
 st.sidebar.markdown("---")
 st.sidebar.subheader("Column Mapping")
 
-# Auto-detect potential columns
 available_columns = df.columns.tolist()
 
-# Try to automatically detect key columns
-product_col = None
-year_col = None
-month_col = None
+# Identify numeric and categorical columns
+numeric_cols = [col for col in available_columns if pd.api.types.is_numeric_dtype(df[col])]
+categorical_cols = [col for col in available_columns if col not in numeric_cols]
 
-# Look for potential column names
-for col in available_columns:
+st.sidebar.write("🔢 Numeric columns:", numeric_cols)
+st.sidebar.write("🏷️ Categorical columns:", categorical_cols)
+
+# Auto-detect likely columns
+detected_columns = {
+    'product': None,
+    'year': None,
+    'month': None,
+    'begin_inventory': None,
+    'production': None,
+    'domestic': None,
+    'export': None,
+    'end_inventory': None
+}
+
+# Look for product column in categorical first, then numeric
+for col in categorical_cols + numeric_cols:
     col_lower = col.lower()
-    if 'product' in col_lower or 'item' in col_lower or 'commodity' in col_lower:
-        product_col = col
-    elif 'year' in col_lower or 'yr' in col_lower:
-        year_col = col
-    elif 'month' in col_lower or 'mnth' in col_lower:
-        month_col = col
+    if not detected_columns['product'] and ('product' in col_lower or 'item' in col_lower or 'name' in col_lower):
+        detected_columns['product'] = col
+    elif not detected_columns['year'] and 'year' in col_lower:
+        detected_columns['year'] = col
+    elif not detected_columns['month'] and 'month' in col_lower:
+        detected_columns['month'] = col
+    elif not detected_columns['begin_inventory'] and ('begin' in col_lower or 'start' in col_lower) and ('invent' in col_lower or 'stock' in col_lower):
+        detected_columns['begin_inventory'] = col
+    elif not detected_columns['production'] and ('production' in col_lower or 'prod' in col_lower):
+        detected_columns['production'] = col
+    elif not detected_columns['domestic'] and 'domestic' in col_lower:
+        detected_columns['domestic'] = col
+    elif not detected_columns['export'] and 'export' in col_lower:
+        detected_columns['export'] = col
+    elif not detected_columns['end_inventory'] and ('end' in col_lower or 'final' in col_lower) and ('invent' in col_lower or 'stock' in col_lower):
+        detected_columns['end_inventory'] = col
 
-# Let user confirm or select columns
-if product_col:
-    default_product = product_col
-else:
-    default_product = available_columns[0] if available_columns else None
+# Let user select each column
+st.sidebar.markdown("**Select Data Columns:**")
 
-if year_col:
-    default_year = year_col
-else:
-    # Look for any column that might contain years
-    for col in available_columns:
-        if df[col].dtype in ['int64', 'float64'] and df[col].min() > 1900 and df[col].max() < 2100:
-            year_col = col
-            break
-    default_year = year_col if year_col else available_columns[1] if len(available_columns) > 1 else None
-
-# User selection for key columns
 product_column = st.sidebar.selectbox(
-    "Select Product Column",
+    "Product/Item Column", 
     options=available_columns,
-    index=available_columns.index(default_product) if default_product and default_product in available_columns else 0
+    index=available_columns.index(detected_columns['product']) if detected_columns['product'] in available_columns else 0
 )
 
+# Show sample values from selected product column
+product_samples = df[product_column].unique()[:5]
+st.sidebar.write(f"Sample products: {', '.join(map(str, product_samples))}")
+
 year_column = st.sidebar.selectbox(
-    "Select Year Column",
+    "Year Column", 
     options=available_columns,
-    index=available_columns.index(default_year) if default_year and default_year in available_columns else min(1, len(available_columns)-1)
+    index=available_columns.index(detected_columns['year']) if detected_columns['year'] in available_columns else min(1, len(available_columns)-1)
 )
 
 month_column = st.sidebar.selectbox(
-    "Select Month Column",
+    "Month Column", 
     options=available_columns,
-    index=available_columns.index(month_col) if month_col and month_col in available_columns else min(2, len(available_columns)-1)
+    index=available_columns.index(detected_columns['month']) if detected_columns['month'] in available_columns else min(2, len(available_columns)-1)
+)
+
+# Select numeric data columns
+st.sidebar.markdown("**Select Numeric Data Columns:**")
+
+begin_inv_col = st.sidebar.selectbox(
+    "Begin Inventory Column", 
+    options=numeric_cols,
+    index=numeric_cols.index(detected_columns['begin_inventory']) if detected_columns['begin_inventory'] in numeric_cols else 0
+)
+
+production_col = st.sidebar.selectbox(
+    "Production Column", 
+    options=numeric_cols,
+    index=numeric_cols.index(detected_columns['production']) if detected_columns['production'] in numeric_cols else min(1, len(numeric_cols)-1)
+)
+
+domestic_col = st.sidebar.selectbox(
+    "Domestic Sales Column", 
+    options=numeric_cols,
+    index=numeric_cols.index(detected_columns['domestic']) if detected_columns['domestic'] in numeric_cols else min(2, len(numeric_cols)-1)
+)
+
+export_col = st.sidebar.selectbox(
+    "Export Column", 
+    options=numeric_cols,
+    index=numeric_cols.index(detected_columns['export']) if detected_columns['export'] in numeric_cols else min(3, len(numeric_cols)-1)
+)
+
+end_inv_col = st.sidebar.selectbox(
+    "End Inventory Column", 
+    options=numeric_cols,
+    index=numeric_cols.index(detected_columns['end_inventory']) if detected_columns['end_inventory'] in numeric_cols else min(4, len(numeric_cols)-1)
 )
 
 # -------------------- Analysis Parameters --------------------
@@ -310,6 +356,7 @@ with st.expander("Debug Information"):
     st.write("Inventory columns found:", inventory_cols)
     st.write("Production columns found:", production_cols)
     st.write("Sales columns found:", sales_cols)
+
 
 
 
