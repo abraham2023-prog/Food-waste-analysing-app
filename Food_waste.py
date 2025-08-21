@@ -44,227 +44,253 @@ with st.sidebar:
         st.success("Data uploaded successfully!")
         
         # Show column names for debugging
-        st.write("Columns in your dataset:", df.columns.tolist())
+        st.write("📋 Columns in your dataset:", df.columns.tolist())
         
     else:
         st.info("Please upload your dataset to start analysis")
         st.stop()
 
-    # -------------------- Analysis Parameters --------------------
-    st.subheader("Select Products & Year Range")
-    selected_products = st.multiselect(
-        "Select Products to Analyze",
-        options=df['Product'].unique(),
-        default=df['Product'].unique()[:3]
-    )
-    
-    year_range = st.slider(
-        "Select Year Range",
-        min_value=int(df['Year'].min()),
-        max_value=int(df['Year'].max()),
-        value=(int(df['Year'].min()), int(df['Year'].max()))
-    )
+# -------------------- Auto-detect Column Names --------------------
+st.sidebar.markdown("---")
+st.sidebar.subheader("Column Mapping")
+
+# Auto-detect potential columns
+available_columns = df.columns.tolist()
+
+# Try to automatically detect key columns
+product_col = None
+year_col = None
+month_col = None
+
+# Look for potential column names
+for col in available_columns:
+    col_lower = col.lower()
+    if 'product' in col_lower or 'item' in col_lower or 'commodity' in col_lower:
+        product_col = col
+    elif 'year' in col_lower or 'yr' in col_lower:
+        year_col = col
+    elif 'month' in col_lower or 'mnth' in col_lower:
+        month_col = col
+
+# Let user confirm or select columns
+if product_col:
+    default_product = product_col
+else:
+    default_product = available_columns[0] if available_columns else None
+
+if year_col:
+    default_year = year_col
+else:
+    # Look for any column that might contain years
+    for col in available_columns:
+        if df[col].dtype in ['int64', 'float64'] and df[col].min() > 1900 and df[col].max() < 2100:
+            year_col = col
+            break
+    default_year = year_col if year_col else available_columns[1] if len(available_columns) > 1 else None
+
+# User selection for key columns
+product_column = st.sidebar.selectbox(
+    "Select Product Column",
+    options=available_columns,
+    index=available_columns.index(default_product) if default_product and default_product in available_columns else 0
+)
+
+year_column = st.sidebar.selectbox(
+    "Select Year Column",
+    options=available_columns,
+    index=available_columns.index(default_year) if default_year and default_year in available_columns else min(1, len(available_columns)-1)
+)
+
+month_column = st.sidebar.selectbox(
+    "Select Month Column",
+    options=available_columns,
+    index=available_columns.index(month_col) if month_col and month_col in available_columns else min(2, len(available_columns)-1)
+)
+
+# -------------------- Analysis Parameters --------------------
+st.sidebar.markdown("---")
+st.sidebar.subheader("Analysis Parameters")
+
+selected_products = st.sidebar.multiselect(
+    "Select Products to Analyze",
+    options=df[product_column].unique(),
+    default=df[product_column].unique()[:3] if len(df[product_column].unique()) > 0 else []
+)
+
+# Get year range safely
+try:
+    year_min = int(df[year_column].min())
+    year_max = int(df[year_column].max())
+except:
+    year_min = 2020
+    year_max = 2023
+
+year_range = st.sidebar.slider(
+    "Select Year Range",
+    min_value=year_min,
+    max_value=year_max,
+    value=(year_min, year_max)
+)
 
 # -------------------- Data Cleaning --------------------
-# Create a copy of the dataframe for cleaning
 df_clean = df.copy()
 
-# Clean column names (remove newlines and extra spaces)
-df_clean.columns = df_clean.columns.str.replace('\n', ' ').str.strip()
+# Clean numeric columns (try to clean all potential numeric columns)
+numeric_columns = []
+for col in df_clean.columns:
+    try:
+        # Try to convert to numeric
+        df_clean[col] = pd.to_numeric(df_clean[col], errors='ignore')
+        if df_clean[col].dtype in ['int64', 'float64']:
+            numeric_columns.append(col)
+    except:
+        pass
 
-# Show available columns for debugging
-st.write("Available columns after cleaning:", df_clean.columns.tolist())
+st.sidebar.write("🔍 Detected numeric columns:", numeric_columns)
 
-# Define expected column names mapping with flexible matching
-column_mapping = {}
-possible_column_names = {
-    'begin_inventory': ['begin month inventory', 'begin_inventory', 'starting inventory', 'initial inventory'],
-    'production': ['production', 'prod'],
-    'domestic': ['domestic', 'local sales', 'domestic sales'],
-    'export': ['export', 'exports', 'export sales'],
-    'end_inventory': ['month-end inventory', 'end inventory', 'ending inventory', 'final inventory', 'month_end_inventory'],
-    'shipment_value': ['shipment value (thousand baht)', 'shipment_value', 'value', 'shipment value'],
-    'capacity': ['capacity', 'production capacity'],
-    'product': ['product', 'item', 'commodity'],
-    'year': ['year', 'yr'],
-    'month': ['month', 'mnth']
-}
-
-# Map columns based on what's available
-for standard_name, possible_names in possible_column_names.items():
-    for possible_name in possible_names:
-        if possible_name in df_clean.columns:
-            column_mapping[possible_name] = standard_name
-            break
-
-# Rename columns
-df_clean = df_clean.rename(columns=column_mapping)
-st.write("Columns after mapping:", df_clean.columns.tolist())
-
-# Clean numeric columns
-numeric_cols = ['begin_inventory', 'production', 'domestic', 'export', 
-                'end_inventory', 'shipment_value', 'capacity']
-
-for col in numeric_cols:
-    if col in df_clean.columns:
-        # Convert to string, remove commas and spaces, then convert to numeric
-        df_clean[col] = (df_clean[col].astype(str)
-                         .str.replace(',', '')
-                         .str.replace(' ', '')
-                         .replace('nan', np.nan)
-                         .replace('', np.nan))
-        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
-
-# Filter based on user selection
-df_filtered = df_clean[
-    (df_clean['product'].isin(selected_products)) &
-    (df_clean['year'] >= year_range[0]) &
-    (df_clean['year'] <= year_range[1])
-].copy()
+# -------------------- Filter Data --------------------
+try:
+    df_filtered = df_clean[
+        (df_clean[product_column].isin(selected_products)) &
+        (df_clean[year_column] >= year_range[0]) &
+        (df_clean[year_column] <= year_range[1])
+    ].copy()
+except Exception as e:
+    st.error(f"Error filtering data: {e}")
+    df_filtered = df_clean.copy()
 
 # -------------------- Derived Metrics --------------------
-# Create default values for missing columns
-required_columns = ['begin_inventory', 'production', 'domestic', 'export', 'end_inventory']
-for col in required_columns:
-    if col not in df_filtered.columns:
-        df_filtered[col] = 0
-        st.warning(f"Column '{col}' not found. Using default value of 0.")
+# Try to identify inventory and production columns automatically
+inventory_cols = []
+production_cols = []
+sales_cols = []
 
-# Calculate waste using the basic formula
+for col in numeric_columns:
+    col_lower = col.lower()
+    if 'invent' in col_lower or 'stock' in col_lower:
+        inventory_cols.append(col)
+    elif 'prod' in col_lower or 'manufactur' in col_lower:
+        production_cols.append(col)
+    elif 'sale' in col_lower or 'domestic' in col_lower or 'export' in col_lower:
+        sales_cols.append(col)
+
+# Use the first found column for each category, or create defaults
+begin_inv_col = inventory_cols[0] if inventory_cols else None
+production_col = production_cols[0] if production_cols else None
+domestic_col = sales_cols[0] if sales_cols else None
+end_inv_col = inventory_cols[1] if len(inventory_cols) > 1 else inventory_cols[0] if inventory_cols else None
+
+# Create default columns if missing
+if begin_inv_col is None:
+    df_filtered['begin_inventory'] = 100  # Default value
+    begin_inv_col = 'begin_inventory'
+
+if production_col is None:
+    df_filtered['production'] = 1000  # Default value
+    production_col = 'production'
+
+if domestic_col is None:
+    df_filtered['domestic_sales'] = 800  # Default value
+    domestic_col = 'domestic_sales'
+
+if end_inv_col is None:
+    df_filtered['end_inventory'] = 100  # Default value
+    end_inv_col = 'end_inventory'
+
+# Calculate waste
 df_filtered['waste'] = (
-    df_filtered['begin_inventory'].fillna(0) + 
-    df_filtered['production'].fillna(0) - 
-    df_filtered['domestic'].fillna(0) - 
-    df_filtered['export'].fillna(0) - 
-    df_filtered['end_inventory'].fillna(0)
+    df_filtered[begin_inv_col].fillna(0) + 
+    df_filtered[production_col].fillna(0) - 
+    df_filtered[domestic_col].fillna(0) - 
+    df_filtered.get('export', pd.Series(0)).fillna(0) -  # Try to get export, default to 0
+    df_filtered[end_inv_col].fillna(0)
 )
 
-# Calculate total distribution
-df_filtered['total_distribution'] = df_filtered['domestic'].fillna(0) + df_filtered['export'].fillna(0)
-
-# Calculate other metrics with error handling
+# Calculate basic metrics
 df_filtered['waste_rate'] = np.where(
-    df_filtered['production'] > 0,
-    df_filtered['waste'] / df_filtered['production'],
+    df_filtered[production_col] > 0,
+    df_filtered['waste'] / df_filtered[production_col],
     0
 )
 
-df_filtered['avg_inventory'] = (
-    df_filtered['begin_inventory'].fillna(0) + 
-    df_filtered['end_inventory'].fillna(0)
-) / 2
+# -------------------- Display Results --------------------
+st.markdown("### 📊 Data Overview")
+st.write(f"**Total records:** {len(df_filtered)}")
+st.write(f"**Selected products:** {', '.join(selected_products)}")
+st.write(f"**Year range:** {year_range[0]} - {year_range[1]}")
 
-df_filtered['inventory_turnover'] = np.where(
-    df_filtered['avg_inventory'] > 0,
-    df_filtered['domestic'].fillna(0) / df_filtered['avg_inventory'],
-    0
-)
+st.markdown("### 📈 Sample of Processed Data")
+st.dataframe(df_filtered.head())
 
-# Calculate capacity utilization if capacity column exists
-if 'capacity' in df_filtered.columns:
-    df_filtered['capacity_utilization'] = np.where(
-        df_filtered['capacity'] > 0,
-        df_filtered['production'].fillna(0) / df_filtered['capacity'],
-        0
-    )
-else:
-    df_filtered['capacity_utilization'] = 0
+st.markdown("### 📋 Summary Statistics")
+st.write(df_filtered[numeric_columns].describe())
 
-# Calculate value metrics if shipment_value exists
-if 'shipment_value' in df_filtered.columns:
-    df_filtered['value_per_unit'] = np.where(
-        df_filtered['total_distribution'] > 0,
-        df_filtered['shipment_value'].fillna(0) / df_filtered['total_distribution'],
-        0
-    )
-    df_filtered['waste_value'] = df_filtered['waste'] * df_filtered['value_per_unit']
-else:
-    df_filtered['value_per_unit'] = 0
-    df_filtered['waste_value'] = 0
-
-# Replace infinite values and handle NaN
-df_filtered = df_filtered.replace([np.inf, -np.inf], 0)
-df_filtered = df_filtered.fillna(0)
-
-# -------------------- Tabs --------------------
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "Overview", "Waste Analysis", "Inventory Analysis", 
-    "Production vs Demand", "Economic Impact"
-])
-
-# -------------------- Tab 1: Overview --------------------
-with tab1:
-    st.markdown('<p class="section-header">📊 Overview Metrics</p>', unsafe_allow_html=True)
+# -------------------- Basic Visualizations --------------------
+if len(selected_products) > 0:
+    st.markdown("### 📊 Waste Analysis by Product")
     
-    # Calculate metrics
-    total_waste = df_filtered['waste'].sum()
-    total_production = df_filtered['production'].sum()
-    overall_waste_rate = total_waste / total_production if total_production > 0 else 0
-    total_waste_value = df_filtered['waste_value'].sum()
-    avg_turnover = df_filtered['inventory_turnover'].mean()
-    
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Waste", f"{total_waste:,.0f} units")
-    col2.metric("Overall Waste Rate", f"{overall_waste_rate:.2%}")
-    col3.metric("Value of Waste", f"฿{total_waste_value:,.0f}")
-    col4.metric("Avg Inventory Turnover", f"{avg_turnover:.2f}")
-    
-    # Waste Trends
-    st.markdown("#### Waste Trends Over Time")
-    waste_by_time = df_filtered.groupby(['year', 'month']).agg({'waste': 'sum'}).reset_index()
-    waste_by_time['date'] = pd.to_datetime(waste_by_time['year'].astype(str) + '-' + waste_by_time['month'].astype(str))
-    fig = px.line(waste_by_time, x='date', y='waste', title="Total Waste Over Time")
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Waste by Product
-    st.markdown("#### Waste by Product")
-    waste_by_product = df_filtered.groupby('product').agg({
+    waste_by_product = df_filtered.groupby(product_column).agg({
         'waste': 'sum',
-        'production': 'sum',
-        'waste_value': 'sum'
+        production_col: 'sum'
     }).reset_index()
+    
     waste_by_product['waste_rate'] = np.where(
-        waste_by_product['production'] > 0,
-        waste_by_product['waste'] / waste_by_product['production'],
+        waste_by_product[production_col] > 0,
+        waste_by_product['waste'] / waste_by_product[production_col],
         0
     )
     
     col1, col2 = st.columns(2)
     with col1:
-        fig = px.bar(waste_by_product, x='product', y='waste', title="Total Waste by Product")
+        fig = px.bar(waste_by_product, x=product_column, y='waste', 
+                     title="Total Waste by Product")
         st.plotly_chart(fig, use_container_width=True)
+    
     with col2:
-        fig = px.bar(waste_by_product, x='product', y='waste_rate', title="Waste Rate by Product")
+        fig = px.bar(waste_by_product, x=product_column, y='waste_rate',
+                     title="Waste Rate by Product")
         st.plotly_chart(fig, use_container_width=True)
 
-# -------------------- Continue with other tabs (simplified for brevity) --------------------
-with tab2:
-    st.markdown('<p class="section-header">📈 Waste Analysis</p>', unsafe_allow_html=True)
-    st.info("Waste analysis charts would appear here")
-
-with tab3:
-    st.markdown('<p class="section-header">📦 Inventory Analysis</p>', unsafe_allow_html=True)
-    st.info("Inventory analysis charts would appear here")
-
-with tab4:
-    st.markdown('<p class="section-header">⚖️ Production vs Demand</p>', unsafe_allow_html=True)
-    st.info("Production vs demand analysis charts would appear here")
-
-with tab5:
-    st.markdown('<p class="section-header">💰 Economic Impact</p>', unsafe_allow_html=True)
-    st.info("Economic impact analysis charts would appear here")
+# -------------------- Time Series Analysis --------------------
+if year_column in df_filtered.columns and month_column in df_filtered.columns:
+    st.markdown("### 📅 Waste Trends Over Time")
+    
+    waste_by_time = df_filtered.groupby([year_column, month_column]).agg({'waste': 'sum'}).reset_index()
+    
+    # Try to create a date column
+    try:
+        waste_by_time['date'] = pd.to_datetime(
+            waste_by_time[year_column].astype(str) + '-' + 
+            waste_by_time[month_column].astype(str)
+        )
+        fig = px.line(waste_by_time, x='date', y='waste', title="Total Waste Over Time")
+        st.plotly_chart(fig, use_container_width=True)
+    except:
+        fig = px.line(waste_by_time, x=year_column, y='waste', color=month_column,
+                      title="Waste by Year and Month")
+        st.plotly_chart(fig, use_container_width=True)
 
 # -------------------- Download Results --------------------
 st.sidebar.markdown("---")
+csv_data = df_filtered.to_csv(index=False)
 st.sidebar.download_button(
     label="Download Analysis Results",
-    data=df_filtered.to_csv(index=False),
+    data=csv_data,
     file_name="food_waste_analysis.csv",
     mime="text/csv"
 )
 
-# Show final dataframe for debugging
-st.write("Final processed data:", df_filtered.head())
+# -------------------- Debug Information --------------------
+with st.expander("Debug Information"):
+    st.write("Original columns:", available_columns)
+    st.write("Product column selected:", product_column)
+    st.write("Year column selected:", year_column)
+    st.write("Month column selected:", month_column)
+    st.write("Numeric columns detected:", numeric_columns)
+    st.write("Inventory columns found:", inventory_cols)
+    st.write("Production columns found:", production_cols)
+    st.write("Sales columns found:", sales_cols)
+
 
 
 
