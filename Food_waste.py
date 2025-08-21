@@ -114,19 +114,19 @@ st.sidebar.subheader("Analysis Parameters")
 # Get unique products
 unique_products = df[product_column].unique()
 
-# Option 1: Select first 10 products
-selected_products = st.sidebar.multiselect(
-    "Select Products to Analyze",
-    options=unique_products,
-    default=unique_products[:min(10, len(unique_products))]  # Select up to first 10 products
-)
-
-# Or Option 2: Select all products (might be heavy if many products)
+# # Option 1: Select first 10 products
 # selected_products = st.sidebar.multiselect(
 #     "Select Products to Analyze",
 #     options=unique_products,
-#     default=unique_products.tolist()
+#     default=unique_products[:min(10, len(unique_products))]  
 # )
+
+# Or Option 2: Select all products (might be heavy if many products)
+selected_products = st.sidebar.multiselect(
+    "Select Products to Analyze",
+    options=unique_products,
+    default=unique_products.tolist()
+)
 
 # Or Option 3: Select top 5 most common products
 # product_counts = df[product_column].value_counts()
@@ -310,6 +310,7 @@ with st.expander("Debug Information"):
     st.write("Inventory columns found:", inventory_cols)
     st.write("Production columns found:", production_cols)
     st.write("Sales columns found:", sales_cols)
+
 
 
 
