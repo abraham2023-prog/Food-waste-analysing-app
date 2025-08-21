@@ -98,13 +98,13 @@ df_filtered = df[
     (df['Year'] <= year_range[1])
 ].copy()
 
-# -------------------- Derived Metrics --------------------
-# Calculate waste if 'Estimated_Waste' column is missing
-if 'Estimated_Waste' not in df_filtered.columns and 'estimated_waste' not in df_filtered.columns:
-    df_filtered['estimated_waste'] = (
-        df_filtered['begin_month_inventory'] + df_filtered['production']
-        - df_filtered['domestic'] - df_filtered['export'] - df_filtered['month_end_inventory']
-    )
+# # -------------------- Derived Metrics --------------------
+# # Calculate waste if 'Estimated_Waste' column is missing
+# if 'Estimated_Waste' not in df_filtered.columns and 'estimated_waste' not in df_filtered.columns:
+#     df_filtered['estimated_waste'] = (
+#         df_filtered['begin_month_inventory'] + df_filtered['production']
+#         - df_filtered['domestic'] - df_filtered['export'] - df_filtered['month_end_inventory']
+#     )
 
 df_filtered['waste'] = df_filtered['estimated_waste']
 df_filtered['waste_rate'] = df_filtered['waste'] / df_filtered['production']
@@ -230,6 +230,7 @@ st.sidebar.download_button(
     file_name="food_waste_analysis.csv",
     mime="text/csv"
 )
+
 
 
 
