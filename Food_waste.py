@@ -111,11 +111,31 @@ month_column = st.sidebar.selectbox(
 st.sidebar.markdown("---")
 st.sidebar.subheader("Analysis Parameters")
 
+# Get unique products
+unique_products = df[product_column].unique()
+
+# Option 1: Select first 10 products
 selected_products = st.sidebar.multiselect(
     "Select Products to Analyze",
-    options=df[product_column].unique(),
-    default=df[product_column].unique()[:3] if len(df[product_column].unique()) > 0 else []
+    options=unique_products,
+    default=unique_products[:min(10, len(unique_products))]  # Select up to first 10 products
 )
+
+# Or Option 2: Select all products (might be heavy if many products)
+# selected_products = st.sidebar.multiselect(
+#     "Select Products to Analyze",
+#     options=unique_products,
+#     default=unique_products.tolist()
+# )
+
+# Or Option 3: Select top 5 most common products
+# product_counts = df[product_column].value_counts()
+# top_products = product_counts.head(5).index.tolist()
+# selected_products = st.sidebar.multiselect(
+#     "Select Products to Analyze",
+#     options=unique_products,
+#     default=top_products
+# )
 
 # Get year range safely
 try:
@@ -290,6 +310,7 @@ with st.expander("Debug Information"):
     st.write("Inventory columns found:", inventory_cols)
     st.write("Production columns found:", production_cols)
     st.write("Sales columns found:", sales_cols)
+
 
 
 
