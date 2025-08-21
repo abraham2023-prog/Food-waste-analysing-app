@@ -1,8 +1,8 @@
-Python 3.7+
-Streamlit 1.0+
-Pandas 1.0+
-NumPy 1.18+
-Plotly 5.0+
+streamlit==1.28.0
+pandas==2.0.3
+numpy==1.24.3
+plotly==5.15.0
+
 
 
 
