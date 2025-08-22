@@ -41,6 +41,11 @@ with st.sidebar:
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file, thousands=',')
         st.success("Data uploaded successfully!")
+        
+        # Display column names for debugging
+        st.write("Columns in your data:")
+        st.write(df.columns.tolist())
+        
     else:
         st.error("Please upload a CSV file to proceed")
         st.stop()
@@ -48,12 +53,9 @@ with st.sidebar:
     # Clean column names
     df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('\n', '_')
     
-    # Rename columns for consistency
-    df = df.rename(columns={
-        'begin_month_inventory': 'begin_inventory',
-        'month-end_inventory': 'end_inventory',
-        'shipment_value_(thousand_baht)': 'shipment_value'
-    })
+    # Display cleaned column names
+    st.write("Cleaned column names:")
+    st.write(df.columns.tolist())
     
     st.subheader("Analysis Parameters")
     selected_products = st.multiselect(
@@ -77,15 +79,20 @@ df_filtered = df[
     (df['product'].isin(selected_products)) &
     (df['year'] >= year_range[0]) &
     (df['year'] <= year_range[1])
-]
+].copy()
 
-# Calculate waste metrics
-df_filtered['waste'] = (df_filtered['begin_inventory'] + df_filtered['production']) - (df_filtered['domestic'] + df_filtered['export'] + df_filtered['end_inventory'])
+# Debug: Show available columns
+st.write("Available columns in filtered data:")
+st.write(df_filtered.columns.tolist())
+
+# Calculate waste metrics - using the actual column names from your data
+# Based on your CSV structure, the end inventory column is likely 'month_end_inventory'
+df_filtered['waste'] = (df_filtered['begin_month_inventory'] + df_filtered['production']) - (df_filtered['domestic'] + df_filtered['export'] + df_filtered['month_end_inventory'])
 df_filtered['waste_rate'] = df_filtered['waste'] / df_filtered['production']
-df_filtered['avg_inventory'] = (df_filtered['begin_inventory'] + df_filtered['end_inventory']) / 2
+df_filtered['avg_inventory'] = (df_filtered['begin_month_inventory'] + df_filtered['month_end_inventory']) / 2
 df_filtered['inventory_turnover'] = df_filtered['domestic'] / df_filtered['avg_inventory']
 df_filtered['capacity_utilization'] = df_filtered['production'] / df_filtered['capacity']
-df_filtered['value_per_unit'] = df_filtered['shipment_value'] / df_filtered['total']
+df_filtered['value_per_unit'] = df_filtered['shipment_value_thousand_baht'] / df_filtered['total']
 df_filtered['waste_value'] = df_filtered['waste'] * df_filtered['value_per_unit']
 
 # Create tabs for different analyses
@@ -187,7 +194,7 @@ with tab3:
         st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("##### Days of Supply")
-        df_filtered['days_of_supply'] = (df_filtered['end_inventory'] / df_filtered['domestic']) * 30
+        df_filtered['days_of_supply'] = (df_filtered['month_end_inventory'] / df_filtered['domestic']) * 30
         days_supply_by_product = df_filtered.groupby('product').agg({
             'days_of_supply': 'mean'
         }).reset_index().sort_values('days_of_supply', ascending=False)
@@ -204,11 +211,11 @@ with tab3:
 
         st.markdown("##### Monthly Inventory Patterns")
         inventory_by_month = df_filtered.groupby(['month', 'product']).agg({
-            'begin_inventory': 'mean',
-            'end_inventory': 'mean'
+            'begin_month_inventory': 'mean',
+            'month_end_inventory': 'mean'
         }).reset_index()
 
-        fig = px.line(inventory_by_month, x='month', y='begin_inventory', color='product',
+        fig = px.line(inventory_by_month, x='month', y='begin_month_inventory', color='product',
                       title="Average Beginning Inventory by Month")
         st.plotly_chart(fig, use_container_width=True)
 
@@ -292,10 +299,10 @@ with tab5:
     with col2:
         st.markdown("##### Waste as Percentage of Shipment Value")
         total_values = df_filtered.groupby('product').agg({
-            'shipment_value': 'sum',
+            'shipment_value_thousand_baht': 'sum',
             'waste_value': 'sum'
         }).reset_index()
-        total_values['waste_pct_of_value'] = total_values['waste_value'] / total_values['shipment_value'] * 100
+        total_values['waste_pct_of_value'] = total_values['waste_value'] / total_values['shipment_value_thousand_baht'] * 100
 
         fig = px.bar(total_values, x='product', y='waste_pct_of_value',
                      title="Waste Value as Percentage of Total Shipment Value")
@@ -364,6 +371,7 @@ st.sidebar.download_button(
     file_name="food_production_analysis.csv",
     mime="text/csv"
 )
+
 
 
 
